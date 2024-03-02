@@ -35,24 +35,34 @@ class OnlinePlanner:
 
         # CONTROLLER PARAMETERS
         # Proportional linear velocity controller gain
-        self.Kv = 0.5
+        self.Kv = 2.5
         # Proportional angular velocity controller gain                   
-        self.Kw = 0.5
+        self.Kw = 5.0
         # Maximum linear velocity control action                   
         self.v_max = 0.15
         # Maximum angular velocity control action               
-        self.w_max = 0.3                
+        self.w_max = 1.0      
+
+        # Planning stopping criteria
+        self.max_retries = 10   # Maximum number of retries
+        self.max_planning_time = 10 # Initial palnning time limit (s)
+        self.reserved_time = 10   #  palnning time to increse after fail (s)
+        self.goal_torlerance = 0.1
+
+        # Recovery Behavior Parmeters 
+        self.recovery_time = rospy.Duration(3)
+        self.recovery_vel = -0.1
 
         # PUBLISHERS
         # Publisher for sending velocity commands to the robot
-        self.cmd_pub = None # TODO: publisher to cmd_vel_topic
+        self.cmd_pub = rospy.Publisher(cmd_vel_topic,Twist,queue_size=1) # TODO: publisher to cmd_vel_topic
         # Publisher for visualizing the path to with rviz
-        self.marker_pub = rospy.Publisher('~path_marker', Marker, queue_size=1)
+        self.marker_pub = rospy.Publisher('/turtlebot_online_path_planning/path_marker', Marker, queue_size=1)
         
         # SUBSCRIBERS
-        self.gridmap_sub = None # TODO: subscriber to gridmap_topic from Octomap Server  
-        self.odom_sub = None # TODO: subscriber to odom_topic  
-        self.move_goal_sub = None # TODO: subscriber to /move_base_simple/goal published by rviz    
+        self.gridmap_sub = rospy.Subscriber(gridmap_topic,OccupancyGrid, self.get_gridmap) # TODO: subscriber to gridmap_topic from Octomap Server  
+        self.odom_sub = rospy.Subscriber(odom_topic,Odometry, self.get_odom) # TODO: subscriber to odom_topic  
+        self.move_goal_sub = rospy.Subscriber('/move_base_simple/goal',PoseStamped, self.get_goal) # TODO: subscriber to /move_base_simple/goal published by rviz    
         
         # TIMERS
         # Timer for velocity controller
@@ -64,26 +74,38 @@ class OnlinePlanner:
                                                               odom.pose.pose.orientation.y,
                                                               odom.pose.pose.orientation.z,
                                                               odom.pose.pose.orientation.w])
-
+        x = odom.pose.pose.position.x 
+        y = odom.pose.pose.position.y
         # TODO: Store current position (x, y, yaw) as a np.array in self.current_pose var.
-        self.current_pose = ...
+        self.current_pose = np.array([x,y,yaw])
     
     # Goal callback: Get new goal from /move_base_simple/goal topic published by rviz 
     # and computes a plan to it using self.plan() method
     def get_goal(self, goal):
         if self.svc.there_is_map:
             # TODO: Store goal (x,y) as a numpy aray in self.goal var and print it 
-            self.goal = ...
+            x = goal.pose.position.x
+            y = goal.pose.position.y
+            self.goal = np.array([x,y])
+            rospy.loginfo("New goal: {}".format(self.goal))
+            rospy.loginfo("Current Pose: {}".format(self.current_pose[0:2]))
             
-            # Plan a new path to self.goal
-            self.plan()
+
+            if self.svc.is_valid(self.goal):
+                # Plan a new path to self.goal
+                self.path = []
+                self.plan()
+            else:
+                rospy.logerr("New goal is not valid")
+
         
     # Map callback: Gets the latest occupancy map published by Octomap server and update 
     # the state validity checker
     def get_gridmap(self, gridmap):
-      
         # To avoid map update too often (change value '1' if necessary)
-        if (gridmap.header.stamp - self.last_map_time).to_sec() > 1:            
+        if (gridmap.header.stamp - self.last_map_time).to_sec() > 3:      
+            rospy.logerr("Update the Map")
+      
             self.last_map_time = gridmap.header.stamp
 
             # Update State Validity Checker
@@ -96,23 +118,49 @@ class OnlinePlanner:
                 # create total_path adding the current position to the rest of waypoints in the path
                 total_path = [self.current_pose[0:2]] + self.path
                 # TODO: check total_path validity. If total_path is not valid replan
+                rospy.loginfo("Checking current path validity ...")
+
+                if not self.svc.check_path(total_path):
+                    rospy.logerr("Current path is not valid -- plan a new path")
+
+                    self.path = []
+                    self.plan()
+                else:
+                    rospy.logwarn("Current path is valid -- stay on same path")
+
 
     # Solve plan from current position to self.goal. 
     def plan(self):
         # Invalidate previous plan if available
         self.path = []
 
-        print("Compute new path")
+        rospy.loginfo("Check if robot is in the obstacle")
+
+        # Check if robot stuck in the obstacle 
+        if self.is_stuck_in_obst(): 
+            rospy.logerr("Robot is stuck in an obstacle!")
+            self.recover()
+            
+        rospy.loginfo("Compute new path")
+
         # TODO: plan a path from self.current_pose to self.goal
-        self.path = ...
+        self.path = compute_path(start_p= self.current_pose[0:2],goal_p=self.goal[0:2],
+                                 state_validity_checker=self.svc, bounds= self.bounds,max_time=self.max_planning_time)
         
         # TODO: If planning fails, consider increasing the planning time, retry the planning a few times, etc.
-        ...
+        for i in range(self.max_retries):
+            rospy.logwarn("Path not found! --> Retrying...")
+            self.path = compute_path(start_p= self.current_pose[0:2],goal_p=self.goal[0:2],
+                                 state_validity_checker=self.svc, bounds= self.bounds, max_time=self.max_planning_time+ self.reserved_time) 
+            if self.path:
+                break
+            
 
         if len(self.path) == 0:
-            print("Path not found!")
+            rospy.logerr("Path not found!")
         else:
-            print("Path found")
+            rospy.loginfo("Path found")
+            rospy.loginfo("Path: {}".format(self.path))
             # Publish plan marker to visualize in rviz
             self.publish_path()
             # remove initial waypoint in the path (current pose is already reached)
@@ -125,17 +173,23 @@ class OnlinePlanner:
         v = 0
         w = 0
         if len(self.path) > 0:
-            if ... # TODO: If current waypoint is reached with some tolerance move to the next waypoint. 
-                ...
+            rospy.loginfo("Current Waypoint: {}".format(self.path[0])) 
+            if self.near_waypoint() :# TODO: If current waypoint is reached with some tolerance move to the next waypoint. 
+                del self.path[0]
                 # If it was the last waypoint in the path show a message indicating it 
-                ...
+                rospy.loginfo("Waypoint reached --> Move to the next waypoint")
             else: # TODO: Compute velocities using controller function in utils_lib
-                v = ...
-                w = ...
-        
+                v,w = move_to_point(self.current_pose,self.path[0],self.Kv,self.Kw)
+        else:
+            #rospy.logwarn("Path is empty")
+            pass
         # Publish velocity commands
         self.__send_commnd__(v, w)
     
+    def near_waypoint(self):
+        wp = self.path[0]
+        dist = np.sqrt((wp[0]-self.current_pose[0])**2 + (wp[1]-self.current_pose[1])**2)
+        return dist < self.goal_torlerance
 
     # PUBLISHER HELPERS
     # Transform linear and angular velocity (v, w) into a Twist message and publish it
@@ -200,6 +254,33 @@ class OnlinePlanner:
                 m.colors.append(color_red)
             
             self.marker_pub.publish(m)
+
+    def recover(self):
+        """
+        Recovery behavior by just moving the robot backward
+        """
+        rospy.logwarn("Robot is stuck in an obstacle! Recovering...")
+        cmd = Twist()
+        start_time = rospy.Time.now()
+        while (rospy.Time.now() -start_time ) < self.recovery_time:
+            v = self.recovery_vel
+            w = 0
+            cmd.linear.x = np.clip(v, -self.v_max, self.v_max)
+            cmd.linear.y = 0
+            cmd.linear.z = 0
+            cmd.angular.x = 0
+            cmd.angular.y = 0
+            cmd.angular.z = np.clip(w, -self.w_max, self.w_max)
+            self.cmd_pub.publish(cmd)
+        rospy.loginfo("Finish recovering!")
+        cmd.linear.x = 0
+        cmd.linear.y = 0
+        self.cmd_pub.publish(cmd)
+
+
+    def is_stuck_in_obst(self):
+        print(self.current_pose[0:2])
+        return not self.svc.is_valid(self.current_pose[0:2])
             
 # MAIN FUNCTION
 if __name__ == '__main__':
