@@ -29,7 +29,8 @@ class StateValidityChecker:
         self.resolution = resolution
         self.origin = np.array(origin)
         self.there_is_map = True
-    
+        self.bound = [resolution*data.shape[0] ]
+
     # Given a pose, returs true if the pose is not in collision and false othewise.
     def is_valid(self, pose): 
         if self.there_is_map == False:
@@ -63,12 +64,11 @@ class StateValidityChecker:
             zeta = np.arctan2(path[i+1][1] - path[i][1], path[i+1][0] - path[i][0])
 
             step = int(dist//step_size)
-            
 
         # TODO: for each point check if `is_valid``. If only one element is not valid return False, otherwise True.
         # For each point between 2 waypoints check if `is_valid`. 
             for j in range(step+1):
-                inc_dist = step * (j)
+                inc_dist = step_size * (j)
                 wp_check  = [path[i][0] + (inc_dist*math.cos(zeta)),path[i][1] + (inc_dist*math.sin(zeta))] 
                 if not self.is_valid(wp_check):
                     #print("Path is not valid")
@@ -81,7 +81,8 @@ class StateValidityChecker:
                 return False 
         return True
             
-        
+    def is_inside_map(self, p):
+        return bool(self.__position_to_map__(p))
 
     # Transform position with respect the map origin to cell coordinates
     def __position_to_map__(self, p):
@@ -176,19 +177,29 @@ class RRT:
         return qnew
     
     def IS_SEGMENT_FREE(self, qnear,qnew):
-        res = 100
-        dist = self.dist(qnear,qnew)
-        zeta = np.arctan2(qnew.pose[1] - qnear.pose[1], qnew.pose[0] - qnear.pose[0])
-        step = dist/res
-
-        for i in range(1,res+1):
-            inc_dist = step * (i)
-            qcheck  = (qnear.pose[0] + (inc_dist*math.cos(zeta)),qnear.pose[1] + (inc_dist*math.sin(zeta))) 
-            qcheck = (qcheck[0],qcheck[1])
-            if not self.state_validity_checker.is_valid(qcheck):
-                return False 
+        
             
-        return True
+        # step_size = self.state_validity_checker.distance *2
+        # dist = self.dist(qnear,qnew)
+        # zeta = np.arctan2(qnew.pose[1] - qnear.pose[1], qnew.pose[0] - qnear.pose[0])
+        # step = int(dist//step_size)
+        # if not self.state_validity_checker.is_valid(qnear.pose):
+        #         return False 
+
+        # for i in range(0,step):
+        #     inc_dist = step_size * (i)
+        #     qcheck  = (qnear.pose[0] + (inc_dist*math.cos(zeta)),qnear.pose[1] + (inc_dist*math.sin(zeta))) 
+        #     qcheck = (qcheck[0],qcheck[1])
+        #     if not self.state_validity_checker.is_valid(qcheck):
+        #         return False 
+            
+        # if not self.state_validity_checker.is_valid(qnew.pose):
+        #         return False 
+
+        if self.state_validity_checker.check_path([qnear.pose,qnew.pose]):  
+            return True
+        else:
+            return False
     
     def FILL_PATH(self, qstart,qgoal):
         qcurrent = qgoal
@@ -227,6 +238,9 @@ def compute_path(start_p, goal_p, state_validity_checker, bounds, max_time=1.0):
     # TODO: if solved, return a list with the [x, y] points in the solution path.
     # example: [[x1, y1], [x2, y2], ...]
     # TODO: Ensure that the path brings the robot to the goal (with a small tolerance)!
+    if goal_p[0] < bounds[0] or goal_p[0] > bounds[1] or goal_p[1] < bounds[2] or goal_p[1] > bounds[3] : 
+        return []
+
     rrt = RRT(state_validity_checker, dominion=bounds, max_time=max_time)
     path = rrt.compute_path(start_p, goal_p)
 
