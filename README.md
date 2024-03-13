@@ -19,6 +19,11 @@ To run the simulation using the provided commands, follow these steps:
    ```
     This command will execute the node responsible for the online path planning process.
 
+3. On RVIZ -> click on 2D Nav Goal. 
+This will call the topic: move_base_simple/goal
+It will send a goal to the navigation by setting a desired pose for the robot to achieve. 
+
+
 ## Overview
 
 This ROS package implements an online path planning algorithm for robotic navigation. It comprises three main modules: `StateValidityChecker`, `Planner`, and `Controller`. These modules are utilized by the `turtlebot_online_path_planning_node.py` script to generate a sequence of online path planning actions. Additionally, this script manages the connection between the Turtlebot in the Gazebo simulation environment via ROS.
@@ -106,3 +111,4 @@ The figure illustrates this problem, showcasing an example of a non-optimized pa
 An issue arises from the concurrent execution of the controller loop and the path checking process, both of which utilize the self.path variable. This concurrency may lead to coding errors, as there is a possibility that `self.path` could be set to empty during the execution of the control loop. 
 
 ## Demo Video 
+[![Online Path Planning ROS - HOP](https://markdown-videos-api.jorgenkh.no/url?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DgHljYtFDeWU)](https://www.youtube.com/watch?v=gHljYtFDeWU)
