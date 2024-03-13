@@ -177,25 +177,6 @@ class RRT:
         return qnew
     
     def IS_SEGMENT_FREE(self, qnear,qnew):
-        
-            
-        # step_size = self.state_validity_checker.distance *2
-        # dist = self.dist(qnear,qnew)
-        # zeta = np.arctan2(qnew.pose[1] - qnear.pose[1], qnew.pose[0] - qnear.pose[0])
-        # step = int(dist//step_size)
-        # if not self.state_validity_checker.is_valid(qnear.pose):
-        #         return False 
-
-        # for i in range(0,step):
-        #     inc_dist = step_size * (i)
-        #     qcheck  = (qnear.pose[0] + (inc_dist*math.cos(zeta)),qnear.pose[1] + (inc_dist*math.sin(zeta))) 
-        #     qcheck = (qcheck[0],qcheck[1])
-        #     if not self.state_validity_checker.is_valid(qcheck):
-        #         return False 
-            
-        # if not self.state_validity_checker.is_valid(qnew.pose):
-        #         return False 
-
         if self.state_validity_checker.check_path([qnear.pose,qnew.pose]):  
             return True
         else:

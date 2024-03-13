@@ -55,16 +55,16 @@ class OnlinePlanner:
 
         # PUBLISHERS
         # Publisher for sending velocity commands to the robot
-        self.cmd_pub = rospy.Publisher(cmd_vel_topic,Twist,queue_size=1) # TODO: publisher to cmd_vel_topic
+        self.cmd_pub = rospy.Publisher(cmd_vel_topic,Twist,queue_size=1) 
         # Publisher for visualizing the path to with rviz
         self.marker_pub = rospy.Publisher('/turtlebot_online_path_planning/path_marker', Marker, queue_size=1)
         self.waypoints_pub = rospy.Publisher('/turtlebot_online_path_planning/waypoints_marker', Marker, queue_size=1)
 
         
         # SUBSCRIBERS
-        self.gridmap_sub = rospy.Subscriber(gridmap_topic,OccupancyGrid, self.get_gridmap) # TODO: subscriber to gridmap_topic from Octomap Server  
-        self.odom_sub = rospy.Subscriber(odom_topic,Odometry, self.get_odom) # TODO: subscriber to odom_topic  
-        self.move_goal_sub = rospy.Subscriber('/move_base_simple/goal',PoseStamped, self.get_goal) # TODO: subscriber to /move_base_simple/goal published by rviz    
+        self.gridmap_sub = rospy.Subscriber(gridmap_topic,OccupancyGrid, self.get_gridmap) 
+        self.odom_sub = rospy.Subscriber(odom_topic,Odometry, self.get_odom) 
+        self.move_goal_sub = rospy.Subscriber('/move_base_simple/goal',PoseStamped, self.get_goal) 
         
         # TIMERS
         # Timer for velocity controller
@@ -80,14 +80,14 @@ class OnlinePlanner:
                                                               odom.pose.pose.orientation.w])
         x = odom.pose.pose.position.x 
         y = odom.pose.pose.position.y
-        # TODO: Store current position (x, y, yaw) as a np.array in self.current_pose var.
+        
         self.current_pose = np.array([x,y,yaw])
     
     # Goal callback: Get new goal from /move_base_simple/goal topic published by rviz 
     # and computes a plan to it using self.plan() method
     def get_goal(self, goal):
         if self.svc.there_is_map:
-            # TODO: Store goal (x,y) as a numpy aray in self.goal var and print it 
+             
             x = goal.pose.position.x
             y = goal.pose.position.y
             self.goal = np.array([x,y])
@@ -125,7 +125,7 @@ class OnlinePlanner:
             if self.path is not None and len(self.path) > 0 and self.goal is not None:
                 # create total_path adding the current position to the rest of waypoints in the path
                 total_path = [self.current_pose[0:2]] + self.path
-                # TODO: check total_path validity. If total_path is not valid replan
+                
                 rospy.loginfo("Checking current path validity ...")
 
                 if not self.svc.check_path(total_path):
@@ -159,7 +159,7 @@ class OnlinePlanner:
         
         # TODO: If planning fails, consider increasing the planning time, retry the planning a few times, etc.
         for i in range(self.max_retries):
-            rospy.logwarn("Path not found! --> Retrying.. ({}/{} attempts)".format(i,self.max_retries))
+            rospy.logwarn("Path not found! --> Retrying.. ({}/{} attempts)".format(i+1,self.max_retries))
             self.path = compute_path(start_p= self.current_pose[0:2],goal_p=self.goal[0:2],
                                  state_validity_checker=self.svc, bounds= self.bounds, max_time=self.max_planning_time+ self.reserved_time) 
             if self.path:
@@ -189,7 +189,7 @@ class OnlinePlanner:
                     del self.path[0]
                     # If it was the last waypoint in the path show a message indicating it 
                     rospy.loginfo("Waypoint reached --> Move to the next waypoint")
-                else: # TODO: Compute velocities using controller function in utils_lib
+                else: 
                     v,w = move_to_point(self.current_pose,self.path[0],self.Kv,self.Kw)
             else:
                 #rospy.logwarn("Path is empty")
@@ -220,7 +220,7 @@ class OnlinePlanner:
     # Publish a path as a series of line markers
     def publish_path(self, _):
         
-        print("Publish path!")
+        #print("Publish path!")
         m = Marker()
         m.header.frame_id = 'odom'
         m.header.stamp = rospy.Time.now()
@@ -314,7 +314,7 @@ class OnlinePlanner:
 # MAIN FUNCTION
 if __name__ == '__main__':
     rospy.init_node('turtlebot_online_path_planning_node')   
-    node = OnlinePlanner('/projected_map', '/odom', '/cmd_vel', np.array([-10.0, 10.0, -10.0, 10.0]), 0.2)
+    node = OnlinePlanner('/projected_map', '/odom', '/cmd_vel', np.array([-10.0, 10.0, -10.0, 10.0]), 0.18)
     rospy.logwarn("STARTING ONLINE PLANNIG NODE")
     # Run forever
     rospy.spin()
